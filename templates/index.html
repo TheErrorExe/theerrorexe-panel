@@ -1,0 +1,817 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+    <meta charset="UTF-8">
+    <title>TheErrorExe Panel</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <style>
+        body {
+            background-color: #1e1e2f;
+            color: #f0f0f0;
+            font-family: 'Segoe UI', sans-serif;
+            padding: 20px;
+            margin: 0;
+        }
+
+
+        .panel-header {
+            background-color: #16213e;
+            padding: 15px;
+            border-radius: 8px;
+            margin-bottom: 20px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+
+        .panel-title {
+            font-size: 24px;
+            font-weight: bold;
+            color: #4cc9f0;
+        }
+
+
+        .file-manager-section {
+            background-color: #2a2a40;
+            border-radius: 12px;
+            padding: 20px;
+            margin-bottom: 20px;
+        }
+
+        .upload-wrapper {
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            gap: 20px;
+            margin-bottom: 30px;
+            flex-wrap: wrap;
+        }
+
+        .progress-container {
+            width: 200px;
+            height: 20px;
+            background-color: #444;
+            border-radius: 10px;
+            overflow: hidden;
+        }
+
+        .progress-bar {
+            height: 100%;
+            width: 0%;
+            background-color: #66f;
+            transition: width 0.3s ease;
+        }
+
+        input[type="file"] {
+            color: white;
+            background-color: #333;
+            border: 1px solid #555;
+            padding: 5px;
+            border-radius: 6px;
+            cursor: pointer;
+        }
+
+        .file-list {
+            max-width: 100%;
+            background-color: #353555;
+            border-radius: 8px;
+            padding: 15px;
+        }
+
+        .entry {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            background-color: #3a3a5a;
+            border-radius: 8px;
+            margin: 10px 0;
+            padding: 10px 15px;
+            transition: background-color 0.3s ease;
+        }
+
+        .entry:hover {
+            background-color: #4a4a6a;
+        }
+
+        .buttons button {
+            margin-left: 10px;
+            background-color: #444;
+            color: #fff;
+            border: none;
+            padding: 6px 12px;
+            border-radius: 8px;
+            cursor: pointer;
+            transition: 0.3s;
+        }
+
+        .buttons button:hover {
+            background-color: #6666aa;
+        }
+
+        a {
+            color: #aaccff;
+            text-decoration: none;
+        }
+
+        a:hover {
+            text-decoration: underline;
+        }
+
+
+        .mc-console-section {
+            background-color: #0f0f1a;
+            border-radius: 12px;
+            padding: 20px;
+        }
+
+        .server-controls {
+            display: flex;
+            gap: 10px;
+            margin-bottom: 15px;
+            align-items: center;
+        }
+
+        .btn {
+            padding: 8px 16px;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+            font-weight: bold;
+            transition: all 0.3s;
+        }
+
+        .btn-start {
+            background-color: #4caf50;
+            color: white;
+        }
+
+        .btn-stop {
+            background-color: #f44336;
+            color: white;
+        }
+
+        .btn-command {
+            background-color: #2196f3;
+            color: white;
+        }
+
+        .btn:hover {
+            opacity: 0.8;
+        }
+
+        .console-container {
+            background-color: #000;
+            border-radius: 8px;
+            padding: 15px;
+            height: 300px;
+            overflow-y: auto;
+            font-family: 'Consolas', 'Monaco', monospace;
+            white-space: pre-wrap;
+            word-wrap: break-word;
+            margin-bottom: 15px;
+        }
+
+        .console-line {
+            margin: 2px 0;
+            line-height: 1.4;
+            color: #e0e0e0;
+        }
+
+        .command-input {
+            display: flex;
+            gap: 10px;
+        }
+
+        #mc-command {
+            flex-grow: 1;
+            padding: 10px;
+            background-color: #1a1a2e;
+            border: 1px solid #4cc9f0;
+            border-radius: 4px;
+            color: white;
+            font-family: 'Consolas', 'Monaco', monospace;
+        }
+
+        .status-indicator {
+            display: inline-block;
+            width: 12px;
+            height: 12px;
+            border-radius: 50%;
+            margin-right: 8px;
+        }
+
+        .status-online {
+            background-color: #4caf50;
+            box-shadow: 0 0 8px #4caf50;
+        }
+
+        .status-offline {
+            background-color: #f44336;
+            box-shadow: 0 0 8px #f44336;
+        }
+
+
+        #loginForm {
+            max-width: 400px;
+            margin: 50px auto;
+            background-color: #2a2a40;
+            padding: 30px;
+            border-radius: 12px;
+            box-shadow: 0 0 20px rgba(0,0,0,0.3);
+        }
+
+        #loginForm h2 {
+            text-align: center;
+            margin-bottom: 20px;
+        }
+
+        #loginForm input {
+            width: 100%;
+            padding: 10px;
+            margin-bottom: 15px;
+            background-color: #353555;
+            border: 1px solid #555;
+            border-radius: 6px;
+            color: white;
+        }
+
+        #loginForm button {
+            width: 100%;
+            padding: 10px;
+            background-color: #4caf50;
+            color: white;
+            border: none;
+            border-radius: 6px;
+            cursor: pointer;
+        }
+
+
+        .tab-container {
+            display: flex;
+            margin-bottom: 20px;
+        }
+
+        .tab {
+            padding: 10px 20px;
+            background-color: #2a2a40;
+            border-radius: 8px 8px 0 0;
+            margin-right: 5px;
+            cursor: pointer;
+        }
+
+        .tab.active {
+            background-color: #353555;
+        }
+
+        .tab-content {
+            display: none;
+        }
+
+        .tab-content.active {
+            display: block;
+        }
+
+
+        .drop-zone {
+            border: 2px dashed #4cc9f0;
+            border-radius: 8px;
+            padding: 20px;
+            text-align: center;
+            margin-bottom: 20px;
+            transition: background-color 0.3s;
+        }
+
+        .drop-zone.highlight {
+            background-color: #2a2a60;
+        }
+
+        /* Auto-scroll button */
+        .btn-autoscroll {
+            background-color: #6666aa;
+            color: white;
+        }
+
+        .btn-autoscroll.active {
+            background-color: #4caf50;
+        }
+    </style>
+</head>
+<body>
+
+    <div id="loginForm">
+        <h2>Login</h2>
+        <form id="login" onsubmit="login(event)">
+            <input type="text" id="username" placeholder="Username" required>
+            <input type="password" id="password" placeholder="Password" required>
+            <button type="submit">Login</button>
+        </form>
+    </div>
+
+
+    <div id="mainPanel" style="display:none;">
+        <div class="panel-header">
+            <div class="panel-title">TheErrorExe Panel</div>
+        </div>
+
+        <div class="tab-container">
+            <div class="tab active" onclick="switchTab('file-manager')">Filemanager</div>
+            <div class="tab" onclick="switchTab('mc-console')">Minecraft Server</div>
+        </div>
+
+
+        <div id="file-manager" class="tab-content active">
+            <div class="file-manager-section">
+                <div id="dropZone" class="drop-zone">
+                    <p>Drop Files here</p>
+                </div>
+                <div class="upload-wrapper">
+                    <div class="progress-container">
+                        <div class="progress-bar" id="progressBar"></div>
+                    </div>
+                    <form id="uploadForm" action="/upload/{{ current }}" method="POST" enctype="multipart/form-data">
+                        <input type="file" name="file" id="fileInput" required>
+                    </form>
+                </div>
+
+                <form action="/create_folder/{{ current }}" method="POST" class="form-container">
+                    <input type="text" name="folder_name" placeholder="Folder Name" required>
+                    <button type="submit">📁 Create Folder</button>
+                </form>
+
+                <div class="file-list">
+                    <h2>📁 Directory: /{{ current }}</h2>
+                    {% if current %}
+                        <p><a href="{{ url_for('index', subpath=current|replace('\\', '/') ~ '/..') }}">🔙 Go Back</a></p>
+                    {% endif %}
+                    {% for entry in entries %}
+                        <div class="entry">
+                            <div>
+                                {% if entry.is_file %}
+                                    📄 {{ entry.name }}
+                                {% else %}
+                                    📁 <a href="{{ url_for('index', subpath=entry.rel_path) }}">{{ entry.name }}</a>
+                                {% endif %}
+                            </div>
+                            <div class="buttons">
+                                {% if entry.is_file %}
+                                    <a href="javascript:void(0)" class="download-link" data-file="{{ entry.rel_path }}"><button>⬇️ Download</button></a>
+                                    <form action="{{ url_for('delete_file', filepath=entry.rel_path) }}" method="POST" class="delete-form" onsubmit="deleteFile(event, '{{ entry.rel_path }}')">
+                                        <button type="submit">🗑️ Delete</button>
+                                    </form>
+                                {% endif %}
+                            </div>
+                        </div>
+                    {% endfor %}
+                </div>
+            </div>
+        </div>
+
+        <div id="mc-console" class="tab-content">
+            <div class="mc-console-section">
+                <div class="server-controls">
+                    <span id="server-status" class="status-indicator status-offline"></span>
+                    <button id="start-server" class="btn btn-start">Start</button>
+                    <button id="stop-server" class="btn btn-stop">Stop</button>
+                    <button id="autoscroll-toggle" class="btn btn-autoscroll">Auto-Scroll</button>
+                </div>
+
+                <div class="console-container">
+                    <div id="mc-console-output" class="console-content">
+                    </div>
+                </div>
+
+                <div class="command-input">
+                    <input type="text" id="mc-command" placeholder="Befehl eingeben...">
+                    <button id="send-command" class="btn btn-command">Send</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        const fileInput = document.getElementById('fileInput');
+        const uploadForm = document.getElementById('uploadForm');
+        const progressBar = document.getElementById('progressBar');
+        const loginForm = document.getElementById('loginForm');
+        const mainPanel = document.getElementById('mainPanel');
+        const dropZone = document.getElementById('dropZone');
+        let jwtToken = localStorage.getItem('jwtToken');
+        let eventSource = null;
+        let currentTab = 'file-manager';
+        let autoScrollEnabled = true;
+
+
+        function toggleAutoScroll() {
+            autoScrollEnabled = !autoScrollEnabled;
+            const button = document.getElementById('autoscroll-toggle');
+            if (autoScrollEnabled) {
+                button.classList.add('active');
+                button.textContent = 'Auto-Scroll: ON';
+                const consoleElement = document.getElementById('mc-console-output');
+                if (consoleElement) consoleElement.scrollTop = consoleElement.scrollHeight;
+            } else {
+                button.classList.remove('active');
+                button.textContent = 'Auto-Scroll: OFF';
+            }
+        }
+
+        function switchTab(tabId) {
+            currentTab = tabId;
+            
+            document.querySelectorAll('.tab-content').forEach(content => {
+                content.classList.remove('active');
+            });
+            
+            document.querySelectorAll('.tab').forEach(tab => {
+                tab.classList.remove('active');
+            });
+            
+
+            document.getElementById(tabId).classList.add('active');
+            document.querySelectorAll('.tab').forEach(tab => {
+                if (tab.textContent.toLowerCase().includes(tabId.split('-')[0])) {
+                    tab.classList.add('active');
+                }
+            });
+            
+
+            if (tabId === 'mc-console') {
+                initMinecraftConsole();
+            }
+        }
+
+        function initMinecraftConsole() {
+            const consoleElement = document.getElementById('mc-console-output');
+            const commandInput = document.getElementById('mc-command');
+            const sendButton = document.getElementById('send-command');
+            const startButton = document.getElementById('start-server');
+            const stopButton = document.getElementById('stop-server');
+            const statusIndicator = document.getElementById('server-status');
+            const autoscrollButton = document.getElementById('autoscroll-toggle');
+
+
+            autoscrollButton.addEventListener('click', toggleAutoScroll);
+            autoscrollButton.textContent = autoScrollEnabled ? 'Auto-Scroll: AN' : 'Auto-Scroll: AUS';
+            if (autoScrollEnabled) autoscrollButton.classList.add('active');
+
+            consoleElement.innerHTML = '<div class="console-line">Fetching Logs...</div>';
+
+            function addConsoleLine(text) {
+                const line = document.createElement('div');
+                line.className = 'console-line';
+                line.textContent = text;
+                consoleElement.appendChild(line);
+                if (autoScrollEnabled) {
+                    consoleElement.scrollTop = consoleElement.scrollHeight;
+                }
+            }
+
+            fetch('/mc_console/last_lines', {
+                headers: {
+                    'Authorization': 'Bearer ' + jwtToken
+                }
+            })
+            .then(response => {
+                if (response.status === 401) throw new Error('Unauthorized');
+                return response.json();
+            })
+            .then(data => {
+                consoleElement.innerHTML = '';
+                if (data.lines && data.lines.length > 0) {
+                    data.lines.forEach(line => {
+                        addConsoleLine(line);
+                    });
+                    addConsoleLine('--- Connected to Live-Console ---');
+                } else {
+                    addConsoleLine('Server offline or error loading logs');
+                }
+            })
+            .catch(error => {
+                console.error('Failed to get last lines:', error);
+                consoleElement.innerHTML = '';
+                addConsoleLine('Error Loading Logs');
+                handleSessionExpired();
+            });
+
+
+            function updateServerStatus() {
+                fetch('/mc_server/status', {
+                    headers: {
+                        'Authorization': 'Bearer ' + jwtToken
+                    }
+                })
+                .then(response => {
+                    if (response.status === 401) throw new Error('Unauthorized');
+                    return response.json();
+                })
+                .then(data => {
+                    if (data.running) {
+                        statusIndicator.className = 'status-indicator status-online';
+                        startButton.disabled = true;
+                        stopButton.disabled = false;
+                        addConsoleLine('Server is online');
+                    } else {
+                        statusIndicator.className = 'status-indicator status-offline';
+                        startButton.disabled = false;
+                        stopButton.disabled = true;
+                        addConsoleLine('Server is offline');
+                    }
+                })
+                .catch(error => {
+                    console.error('Status check failed:', error);
+                    handleSessionExpired();
+                });
+            }
+
+
+            startButton.addEventListener('click', () => {
+                addConsoleLine('Starting Server...');
+                fetch('/mc_server/start', {
+                    method: 'POST',
+                    headers: {
+                        'Authorization': 'Bearer ' + jwtToken,
+                        'Content-Type': 'application/json'
+                    }
+                })
+                .then(response => {
+                    if (response.status === 401) throw new Error('Unauthorized');
+                    return response.json();
+                })
+                .then(data => {
+                    if (data.success) {
+                        updateServerStatus();
+                    }
+                    addConsoleLine(data.message);
+                })
+                .catch(error => {
+                    console.error('Start failed:', error);
+                    addConsoleLine('Error starting Server...');
+                    handleSessionExpired();
+                });
+            });
+
+
+            stopButton.addEventListener('click', () => {
+                addConsoleLine('Stopping Server...');
+                fetch('/mc_server/stop', {
+                    method: 'POST',
+                    headers: {
+                        'Authorization': 'Bearer ' + jwtToken,
+                        'Content-Type': 'application/json'
+                    }
+                })
+                .then(response => {
+                    if (response.status === 401) throw new Error('Unauthorized');
+                    return response.json();
+                })
+                .then(data => {
+                    if (data.success) {
+                        updateServerStatus();
+                    }
+                    addConsoleLine(data.message);
+                })
+                .catch(error => {
+                    console.error('Stop failed:', error);
+                    addConsoleLine('Failed to stop Server');
+                    handleSessionExpired();
+                });
+            });
+
+
+            function sendCommand() {
+                const command = commandInput.value.trim();
+                if (command) {
+                    addConsoleLine('> ' + command);
+                    commandInput.value = '';
+                    
+                    fetch('/mc_console/command', {
+                        method: 'POST',
+                        headers: {
+                            'Authorization': 'Bearer ' + jwtToken,
+                            'Content-Type': 'application/json'
+                        },
+                        body: JSON.stringify({ command: command })
+                    })
+                    .then(response => {
+                        if (response.status === 401) throw new Error('Unauthorized');
+                        return response.json();
+                    })
+                    .then(data => {
+                        if (!data.success) {
+                            addConsoleLine('Fehler beim Senden des Befehls');
+                        }
+                    })
+                    .catch(error => {
+                        console.error('Command failed:', error);
+                        addConsoleLine('Error sending Command');
+                        handleSessionExpired();
+                    });
+                }
+            }
+
+            sendButton.addEventListener('click', sendCommand);
+            commandInput.addEventListener('keypress', (e) => {
+                if (e.key === 'Enter') sendCommand();
+            });
+
+
+            if (eventSource) eventSource.close();
+            
+            eventSource = new EventSource('/mc_console/stream?token=' + encodeURIComponent(jwtToken));
+            
+            eventSource.onmessage = (event) => {
+                addConsoleLine(event.data);
+            };
+
+            eventSource.onerror = (error) => {
+                console.error('SSE Error:', error);
+                addConsoleLine('Connection failed!');
+                if (eventSource) {
+                    eventSource.close();
+                    eventSource = null;
+                }
+                setTimeout(initMinecraftConsole, 5000);
+            };
+
+            updateServerStatus();
+        }
+
+
+        fileInput.addEventListener('change', () => {
+            const file = fileInput.files[0];
+            if (!file) return;
+
+            const formData = new FormData(uploadForm);
+            const xhr = new XMLHttpRequest();
+            xhr.open('POST', uploadForm.action, true);
+            xhr.setRequestHeader('Authorization', 'Bearer ' + jwtToken);
+
+            xhr.upload.addEventListener('progress', (e) => {
+                if (e.lengthComputable) {
+                    const percent = (e.loaded / e.total) * 100;
+                    progressBar.style.width = percent + '%';
+                }
+            });
+
+            xhr.onload = function() {
+                if (xhr.status === 401) {
+                    handleSessionExpired();
+                    return;
+                }
+                if (xhr.status === 200) {
+                    window.location.reload();
+                }
+            };
+
+            xhr.send(formData);
+        });
+
+
+        ['dragenter', 'dragover', 'dragleave', 'drop'].forEach(eventName => {
+            dropZone.addEventListener(eventName, preventDefaults, false);
+        });
+
+        function preventDefaults(e) {
+            e.preventDefault();
+            e.stopPropagation();
+        }
+
+        ['dragenter', 'dragover'].forEach(eventName => {
+            dropZone.addEventListener(eventName, highlight, false);
+        });
+
+        ['dragleave', 'drop'].forEach(eventName => {
+            dropZone.addEventListener(eventName, unhighlight, false);
+        });
+
+        function highlight() {
+            dropZone.classList.add('highlight');
+        }
+
+        function unhighlight() {
+            dropZone.classList.remove('highlight');
+        }
+
+        dropZone.addEventListener('drop', handleDrop, false);
+
+        function handleDrop(e) {
+            const dt = e.dataTransfer;
+            const files = dt.files;
+            
+            if (files.length > 0) {
+                fileInput.files = files;
+
+                const event = new Event('change');
+                fileInput.dispatchEvent(event);
+            }
+        }
+
+
+        document.querySelectorAll('.download-link').forEach(link => {
+            link.addEventListener('click', (event) => {
+                event.preventDefault();
+                const filePath = link.getAttribute('data-file');
+
+                fetch(`/download/${filePath}`, {
+                    method: 'GET',
+                    headers: {
+                        'Authorization': 'Bearer ' + jwtToken
+                    }
+                })
+                .then(response => {
+                    if (response.status === 401) {
+                        handleSessionExpired();
+                        return;
+                    }
+                    return response.blob();
+                })
+                .then(blob => {
+                    if (blob) {
+                        const link = document.createElement('a');
+                        link.href = URL.createObjectURL(blob);
+                        link.download = filePath.split('/').pop();
+                        link.click();
+                    }
+                });
+            });
+        });
+
+
+        function deleteFile(event, filepath) {
+            event.preventDefault();
+            fetch(`/delete/${filepath}`, {
+                method: 'POST',
+                headers: {
+                    'Authorization': 'Bearer ' + jwtToken
+                }
+            })
+            .then(response => {
+                if (response.status === 401) {
+                    handleSessionExpired();
+                    return;
+                }
+                if (response.status === 200) {
+                    window.location.reload();
+                }
+            });
+        }
+
+
+        function login(event) {
+            event.preventDefault();
+            const username = document.getElementById('username').value;
+            const password = document.getElementById('password').value;
+
+            fetch('/login', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json'
+                },
+                body: JSON.stringify({ username, password })
+            })
+            .then(response => response.json())
+            .then(data => {
+                if (data.token) {
+                    jwtToken = data.token;
+                    localStorage.setItem('jwtToken', jwtToken);
+                    loginForm.style.display = 'none';
+                    mainPanel.style.display = 'block';
+                    switchTab(currentTab);
+                }
+            });
+        }
+
+
+        function handleSessionExpired() {
+            localStorage.removeItem('jwtToken');
+            loginForm.style.display = 'block';
+            mainPanel.style.display = 'none';
+            if (eventSource) {
+                eventSource.close();
+                eventSource = null;
+            }
+        }
+
+
+        if (jwtToken) {
+            fetch('/mc_server/status', {
+                headers: {
+                    'Authorization': 'Bearer ' + jwtToken
+                }
+            })
+            .then(response => {
+                if (response.status === 401) {
+                    handleSessionExpired();
+                } else {
+                    loginForm.style.display = 'none';
+                    mainPanel.style.display = 'block';
+                    switchTab(currentTab);
+                }
+            });
+        } else {
+            loginForm.style.display = 'block';
+            mainPanel.style.display = 'none';
+        }
+    </script>
+</body>
+</html>
