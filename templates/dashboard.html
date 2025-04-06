@@ -1,0 +1,570 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+    <meta charset="UTF-8">
+    <title>Minecraft Server Panel</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <style>
+        body {
+            background-color: #1e1e2f;
+            color: #f0f0f0;
+            font-family: 'Segoe UI', sans-serif;
+            padding: 20px;
+            margin: 0;
+        }
+        .panel-header {
+            background-color: #16213e;
+            padding: 15px;
+            border-radius: 8px;
+            margin-bottom: 20px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+        .panel-title {
+            font-size: 24px;
+            font-weight: bold;
+            color: #4cc9f0;
+        }
+        .server-list {
+            background-color: #2a2a40;
+            border-radius: 12px;
+            padding: 20px;
+            margin-bottom: 20px;
+        }
+        .server-card {
+            background-color: #353555;
+            border-radius: 8px;
+            padding: 15px;
+            margin-bottom: 10px;
+            cursor: pointer;
+            transition: background-color 0.3s;
+        }
+        .server-card:hover {
+            background-color: #4a4a6a;
+        }
+        .server-card.active {
+            border-left: 4px solid #4cc9f0;
+            background-color: #3a3a5a;
+        }
+        .server-name {
+            font-weight: bold;
+            margin-bottom: 5px;
+        }
+        .server-details {
+            font-size: 0.9em;
+            color: #aaa;
+        }
+        .btn {
+            padding: 8px 16px;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+            font-weight: bold;
+            transition: all 0.3s;
+        }
+        .btn-primary {
+            background-color: #4cc9f0;
+            color: white;
+        }
+        .btn-success {
+            background-color: #4caf50;
+            color: white;
+        }
+        .btn-danger {
+            background-color: #f44336;
+            color: white;
+        }
+        .btn:hover {
+            opacity: 0.8;
+        }
+        .tab-container {
+            display: flex;
+            margin-bottom: 20px;
+        }
+        .tab {
+            padding: 10px 20px;
+            background-color: #2a2a40;
+            border-radius: 8px 8px 0 0;
+            margin-right: 5px;
+            cursor: pointer;
+        }
+        .tab.active {
+            background-color: #353555;
+        }
+        .tab-content {
+            display: none;
+        }
+        .tab-content.active {
+            display: block;
+        }
+        .form-group {
+            margin-bottom: 15px;
+        }
+        .form-group label {
+            display: block;
+            margin-bottom: 5px;
+        }
+        .form-group input, .form-group select {
+            width: 100%;
+            padding: 8px;
+            background-color: #353555;
+            border: 1px solid #555;
+            border-radius: 4px;
+            color: white;
+        }
+        .modal {
+            display: none;
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background-color: rgba(0,0,0,0.7);
+            z-index: 1000;
+            justify-content: center;
+            align-items: center;
+        }
+        .modal-content {
+            background-color: #2a2a40;
+            padding: 20px;
+            border-radius: 8px;
+            width: 80%;
+            max-width: 500px;
+        }
+        .admin-only {
+            display: none;
+        }
+        .is-admin .admin-only {
+            display: block;
+        }
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            margin-bottom: 20px;
+        }
+        th, td {
+            padding: 8px;
+            text-align: left;
+            border-bottom: 1px solid #444;
+        }
+    </style>
+</head>
+<body class="{{ 'is-admin' if is_admin else '' }}">
+    <div class="panel-header">
+        <div class="panel-title">Minecraft Server Panel</div>
+        <div class="admin-only">
+            <button class="btn btn-primary" onclick="openCreateServerModal()">Create Server</button>
+        </div>
+    </div>
+
+    <div class="server-list">
+        <h2>Your Servers</h2>
+        <div id="servers-container">
+            {% for server in servers %}
+                <div class="server-card {% if server.id == active_server_id %}active{% endif %}" 
+                     onclick="selectServer({{ server.id }})">
+                    <div class="server-name">{{ server.name }}</div>
+                    <div class="server-details" id="server-status-{{ server.id }}">
+                        Loading status...
+                    </div>
+                </div>
+            {% else %}
+                <p>No servers available. Please contact an admin.</p>
+            {% endfor %}
+        </div>
+    </div>
+
+    <div class="tab-container">
+        <div class="tab active" onclick="switchTab('file-manager')">File Manager</div>
+        <div class="tab" onclick="switchTab('console')">Console</div>
+        <div class="tab admin-only" onclick="switchTab('admin')">Admin</div>
+    </div>
+
+    <div id="file-manager" class="tab-content active">
+        <!-- File manager content will be loaded here via AJAX -->
+    </div>
+
+    <div id="console" class="tab-content">
+        <!-- Console content will be loaded here via AJAX -->
+    </div>
+
+    <div id="admin" class="tab-content admin-only">
+        <h2>Admin Panel</h2>
+        <div class="admin-tabs">
+            <button class="btn" onclick="loadAdminTab('users')">User Management</button>
+            <button class="btn" onclick="loadAdminTab('server-users')">Server Access</button>
+        </div>
+        <div id="admin-content">
+            <!-- Admin content loaded here -->
+        </div>
+    </div>
+
+    <div id="create-server-modal" class="modal">
+        <div class="modal-content">
+            <h2>Create New Server</h2>
+            <form id="create-server-form">
+                <div class="form-group">
+                    <label for="server-name">Server Name</label>
+                    <input type="text" id="server-name" required>
+                </div>
+                <div class="form-group">
+                    <label for="server-directory">Server Directory (absolute path)</label>
+                    <input type="text" id="server-directory" required>
+                </div>
+                <div class="form-group">
+                    <label for="server-jar">JAR File Name</label>
+                    <input type="text" id="server-jar" required>
+                </div>
+                <div class="form-group">
+                    <label for="java-args">Java Arguments</label>
+                    <input type="text" id="java-args" value="-Xmx1024M -Xms1024M" required>
+                </div>
+                <div class="form-group">
+                    <label>
+                        <input type="checkbox" id="auto-start"> Auto Start
+                    </label>
+                </div>
+                <div class="form-group">
+                    <button type="submit" class="btn btn-success">Create</button>
+                    <button type="button" class="btn btn-danger" onclick="closeCreateServerModal()">Cancel</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <script>
+        let currentTab = 'file-manager';
+        let activeServerId = {{ active_server_id if active_server_id else 'null' }};
+        let isAdmin = {{ 'true' if is_admin else 'false' }};
+
+        function loadServerStatuses() {
+            {% for server in servers %}
+                fetch(`/mc_server/status?server_id={{ server.id }}`, {
+                    headers: {
+                        'Authorization': 'Bearer ' + localStorage.getItem('jwtToken')
+                    }
+                })
+                .then(response => response.json())
+                .then(data => {
+                    const statusElement = document.getElementById(`server-status-{{ server.id }}`);
+                    if (data.running) {
+                        statusElement.innerHTML = '🟢 Online';
+                    } else {
+                        statusElement.innerHTML = '🔴 Offline';
+                    }
+                });
+            {% endfor %}
+        }
+
+        function loadAdminTab(tab) {
+            const adminContent = document.getElementById('admin-content');
+            adminContent.innerHTML = '<p>Loading...</p>';
+            
+            let url = '';
+            if (tab === 'users') {
+                url = '/admin/users';
+            } else if (tab === 'server-users') {
+                url = `/admin/server/${activeServerId}/users`;
+            }
+            
+            fetch(url, {
+                headers: {
+                    'Authorization': 'Bearer ' + localStorage.getItem('jwtToken')
+                }
+            })
+            .then(response => response.json())
+            .then(data => {
+                if (data.success) {
+                    if (tab === 'users') {
+                        renderUserManagement(data.users);
+                    } else if (tab === 'server-users') {
+                        renderServerUserManagement(data.users);
+                    }
+                }
+            });
+        }
+
+        function renderUserManagement(users) {
+            const html = `
+                <h3>All Users</h3>
+                <table>
+                    <tr>
+                        <th>Username</th>
+                        <th>Admin</th>
+                        <th>Actions</th>
+                    </tr>
+                    ${users.map(user => `
+                        <tr>
+                            <td>${user.username}</td>
+                            <td>${user.is_admin ? 'Yes' : 'No'}</td>
+                            <td>
+                                <button class="btn" onclick="editUser(${user.id})">Edit</button>
+                            </td>
+                        </tr>
+                    `).join('')}
+                </table>
+                <button class="btn btn-success" onclick="showAddUserForm()">Add User</button>
+                <div id="add-user-form" style="display:none; margin-top:20px;">
+                    <input type="text" id="new-username" placeholder="Username">
+                    <input type="password" id="new-password" placeholder="Password">
+                    <label><input type="checkbox" id="new-is-admin"> Is Admin</label>
+                    <button class="btn btn-success" onclick="addUser()">Create User</button>
+                </div>
+            `;
+            document.getElementById('admin-content').innerHTML = html;
+        }
+
+        function renderServerUserManagement(users) {
+            const html = `
+                <h3>Server Access</h3>
+                <table>
+                    <tr>
+                        <th>Username</th>
+                        <th>Can Manage</th>
+                        <th>Actions</th>
+                    </tr>
+                    ${users.map(user => `
+                        <tr>
+                            <td>${user.username}</td>
+                            <td>${user.can_manage ? 'Yes' : 'No'}</td>
+                            <td>
+                                <button class="btn btn-danger" onclick="removeServerAccess(${user.id})">Remove</button>
+                            </td>
+                        </tr>
+                    `).join('')}
+                </table>
+                <button class="btn btn-success" onclick="showAddServerUserForm()">Add User</button>
+                <div id="add-server-user-form" style="display:none; margin-top:20px;">
+                    <select id="user-to-add" class="form-control">
+                        <!-- Users will be populated here -->
+                    </select>
+                    <label><input type="checkbox" id="can-manage"> Can Manage</label>
+                    <button class="btn btn-success" onclick="addServerUser()">Add User</button>
+                </div>
+            `;
+            document.getElementById('admin-content').innerHTML = html;
+            
+            fetch('/admin/users', {
+                headers: {
+                    'Authorization': 'Bearer ' + localStorage.getItem('jwtToken')
+                }
+            })
+            .then(response => response.json())
+            .then(data => {
+                if (data.success) {
+                    const select = document.getElementById('user-to-add');
+                    select.innerHTML = data.users
+                        .filter(user => !users.some(u => u.id === user.id))
+                        .map(user => `<option value="${user.id}">${user.username}</option>`)
+                        .join('');
+                }
+            });
+        }
+
+        function switchTab(tabId) {
+            currentTab = tabId;
+            
+            document.querySelectorAll('.tab-content').forEach(content => {
+                content.classList.remove('active');
+            });
+            
+            document.querySelectorAll('.tab').forEach(tab => {
+                tab.classList.remove('active');
+            });
+            
+            document.getElementById(tabId).classList.add('active');
+            document.querySelectorAll('.tab').forEach(tab => {
+                if (tab.textContent.toLowerCase().includes(tabId.split('-')[0])) {
+                    tab.classList.add('active');
+                }
+            });
+            
+            if (tabId === 'file-manager') {
+                loadFileManager();
+            } else if (tabId === 'console') {
+                loadConsole();
+            }
+        }
+
+        function selectServer(serverId) {
+            fetch('/server/select/' + serverId, {
+                method: 'POST',
+                headers: {
+                    'Authorization': 'Bearer ' + localStorage.getItem('jwtToken'),
+                    'Content-Type': 'application/json'
+                }
+            })
+            .then(response => response.json())
+            .then(data => {
+                if (data.success) {
+                    activeServerId = serverId;
+                    document.querySelectorAll('.server-card').forEach(card => {
+                        card.classList.remove('active');
+                    });
+                    document.querySelector(`.server-card[onclick="selectServer(${serverId})"]`).classList.add('active');
+                    loadFileManager();
+                }
+            });
+        }
+
+        function openCreateServerModal() {
+            document.getElementById('create-server-modal').style.display = 'flex';
+        }
+
+        function closeCreateServerModal() {
+            document.getElementById('create-server-modal').style.display = 'none';
+        }
+
+        document.getElementById('create-server-form').addEventListener('submit', function(e) {
+            e.preventDefault();
+            
+            const serverData = {
+                name: document.getElementById('server-name').value,
+                directory: document.getElementById('server-directory').value,
+                jar_file: document.getElementById('server-jar').value,
+                java_args: document.getElementById('java-args').value,
+                auto_start: document.getElementById('auto-start').checked
+            };
+            
+            fetch('/server/create', {
+                method: 'POST',
+                headers: {
+                    'Authorization': 'Bearer ' + localStorage.getItem('jwtToken'),
+                    'Content-Type': 'application/json'
+                },
+                body: JSON.stringify(serverData)
+            })
+            .then(response => response.json())
+            .then(data => {
+                if (data.success) {
+                    closeCreateServerModal();
+                    location.reload();
+                } else {
+                    alert(data.error || 'Failed to create server');
+                }
+            });
+        });
+
+        function showAddUserForm() {
+            document.getElementById('add-user-form').style.display = 'block';
+        }
+
+        function addUser() {
+            const username = document.getElementById('new-username').value;
+            const password = document.getElementById('new-password').value;
+            const isAdmin = document.getElementById('new-is-admin').checked;
+            
+            fetch('/admin/users/add', {
+                method: 'POST',
+                headers: {
+                    'Authorization': 'Bearer ' + localStorage.getItem('jwtToken'),
+                    'Content-Type': 'application/json'
+                },
+                body: JSON.stringify({
+                    username: username,
+                    password: password,
+                    is_admin: isAdmin
+                })
+            })
+            .then(response => response.json())
+            .then(data => {
+                if (data.success) {
+                    loadAdminTab('users');
+                } else {
+                    alert(data.error || 'Failed to add user');
+                }
+            });
+        }
+
+        function showAddServerUserForm() {
+            document.getElementById('add-server-user-form').style.display = 'block';
+        }
+
+        function addServerUser() {
+            const userId = document.getElementById('user-to-add').value;
+            const canManage = document.getElementById('can-manage').checked;
+            
+            fetch(`/admin/server/${activeServerId}/users/add`, {
+                method: 'POST',
+                headers: {
+                    'Authorization': 'Bearer ' + localStorage.getItem('jwtToken'),
+                    'Content-Type': 'application/json'
+                },
+                body: JSON.stringify({
+                    user_id: userId,
+                    can_manage: canManage
+                })
+            })
+            .then(response => response.json())
+            .then(data => {
+                if (data.success) {
+                    loadAdminTab('server-users');
+                } else {
+                    alert(data.error || 'Failed to add user to server');
+                }
+            });
+        }
+
+        function removeServerAccess(userId) {
+            if (confirm('Remove this user from server?')) {
+                fetch(`/admin/server/${activeServerId}/users/remove`, {
+                    method: 'POST',
+                    headers: {
+                        'Authorization': 'Bearer ' + localStorage.getItem('jwtToken'),
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({
+                        user_id: userId
+                    })
+                })
+                .then(response => response.json())
+                .then(data => {
+                    if (data.success) {
+                        loadAdminTab('server-users');
+                    } else {
+                        alert(data.error || 'Failed to remove user');
+                    }
+                });
+            }
+        }
+
+        function loadFileManager() {
+            const container = document.getElementById('file-manager');
+            container.innerHTML = '<p>Loading...</p>';
+            
+            fetch('/files', {
+                headers: {
+                    'Authorization': 'Bearer ' + localStorage.getItem('jwtToken')
+                }
+            })
+            .then(response => response.text())
+            .then(html => {
+                container.innerHTML = html;
+            });
+        }
+
+        function loadConsole() {
+            const container = document.getElementById('console');
+            container.innerHTML = '<p>Loading...</p>';
+            
+            fetch('/console-view', {
+                headers: {
+                    'Authorization': 'Bearer ' + localStorage.getItem('jwtToken')
+                }
+            })
+            .then(response => response.text())
+            .then(html => {
+                container.innerHTML = html;
+                initConsole();
+            });
+        }
+
+        loadServerStatuses();
+        if (isAdmin && activeServerId) {
+            loadAdminTab('users');
+        }
+        loadFileManager();
+    </script>
+</body>
+</html>
