@@ -278,6 +278,15 @@ def admin_add_user():
     db.session.commit()
     return jsonify(success=True)
 
+@app.route('/auth')
+def auth():
+    return redirect(url_for('login'))
+
+@app.route('/favicon.ico')
+def favicon():
+    return send_from_directory(os.path.join(app.root_path, 'static'),
+                             'favicon.ico', mimetype='image/vnd.microsoft.icon')
+    
 @app.route('/admin/server/<int:server_id>/users', methods=['GET'])
 @jwt_required()
 def server_users(server_id):
