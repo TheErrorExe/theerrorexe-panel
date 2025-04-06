@@ -178,7 +178,6 @@ def index():
     return redirect(url_for('dashboard'))
 
 @app.route('/dashboard')
-@jwt_required()
 def dashboard():
     current_user = get_jwt_identity()
     user_servers = []
