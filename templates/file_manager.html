@@ -1,0 +1,166 @@
+<div class="file-manager-section">
+    <div id="dropZone" class="drop-zone">
+        <p>Drop Files here</p>
+    </div>
+    <div class="upload-wrapper">
+        <div class="progress-container">
+            <div class="progress-bar" id="progressBar"></div>
+        </div>
+        <form id="uploadForm" action="/upload/{{ current }}" method="POST" enctype="multipart/form-data">
+            <input type="file" name="file" id="fileInput" required>
+        </form>
+    </div>
+
+    <form action="/create_folder/{{ current }}" method="POST" class="form-container">
+        <input type="text" name="folder_name" placeholder="Folder Name" required>
+        <button type="submit" class="btn">📁 Create Folder</button>
+    </form>
+
+    <div class="file-list">
+        <h2>📁 Directory: /{{ current }}</h2>
+        {% if current %}
+            <p><a href="{{ url_for('index', subpath=current|replace('\\', '/') ~ '/..') }}">🔙 Go Back</a></p>
+        {% endif %}
+        {% for entry in entries %}
+            <div class="entry">
+                <div>
+                    {% if entry.is_file %}
+                        📄 {{ entry.name }}
+                    {% else %}
+                        📁 <a href="{{ url_for('index', subpath=entry.rel_path) }}">{{ entry.name }}</a>
+                    {% endif %}
+                </div>
+                <div class="buttons">
+                    {% if entry.is_file %}
+                        <a href="javascript:void(0)" class="download-link" data-file="{{ entry.rel_path }}"><button>⬇️ Download</button></a>
+                        <form action="{{ url_for('delete_file', filepath=entry.rel_path) }}" method="POST" class="delete-form" onsubmit="deleteFile(event, '{{ entry.rel_path }}')">
+                            <button type="submit">🗑️ Delete</button>
+                        </form>
+                    {% endif %}
+                </div>
+            </div>
+        {% endfor %}
+    </div>
+</div>
+
+<script>
+    const fileInput = document.getElementById('fileInput');
+    const uploadForm = document.getElementById('uploadForm');
+    const progressBar = document.getElementById('progressBar');
+    const dropZone = document.getElementById('dropZone');
+
+    fileInput.addEventListener('change', () => {
+        const file = fileInput.files[0];
+        if (!file) return;
+
+        const formData = new FormData(uploadForm);
+        const xhr = new XMLHttpRequest();
+        xhr.open('POST', uploadForm.action, true);
+        xhr.setRequestHeader('Authorization', 'Bearer ' + localStorage.getItem('jwtToken'));
+
+        xhr.upload.addEventListener('progress', (e) => {
+            if (e.lengthComputable) {
+                const percent = (e.loaded / e.total) * 100;
+                progressBar.style.width = percent + '%';
+            }
+        });
+
+        xhr.onload = function() {
+            if (xhr.status === 401) {
+                window.location.href = '/';
+                return;
+            }
+            if (xhr.status === 200) {
+                window.location.reload();
+            }
+        };
+
+        xhr.send(formData);
+    });
+
+    ['dragenter', 'dragover', 'dragleave', 'drop'].forEach(eventName => {
+        dropZone.addEventListener(eventName, preventDefaults, false);
+    });
+
+    function preventDefaults(e) {
+        e.preventDefault();
+        e.stopPropagation();
+    }
+
+    ['dragenter', 'dragover'].forEach(eventName => {
+        dropZone.addEventListener(eventName, highlight, false);
+    });
+
+    ['dragleave', 'drop'].forEach(eventName => {
+        dropZone.addEventListener(eventName, unhighlight, false);
+    });
+
+    function highlight() {
+        dropZone.classList.add('highlight');
+    }
+
+    function unhighlight() {
+        dropZone.classList.remove('highlight');
+    }
+
+    dropZone.addEventListener('drop', handleDrop, false);
+
+    function handleDrop(e) {
+        const dt = e.dataTransfer;
+        const files = dt.files;
+        
+        if (files.length > 0) {
+            fileInput.files = files;
+            const event = new Event('change');
+            fileInput.dispatchEvent(event);
+        }
+    }
+
+    document.querySelectorAll('.download-link').forEach(link => {
+        link.addEventListener('click', (event) => {
+            event.preventDefault();
+            const filePath = link.getAttribute('data-file');
+
+            fetch(`/download/${filePath}`, {
+                method: 'GET',
+                headers: {
+                    'Authorization': 'Bearer ' + localStorage.getItem('jwtToken')
+                }
+            })
+            .then(response => {
+                if (response.status === 401) {
+                    window.location.href = '/';
+                    return;
+                }
+                return response.blob();
+            })
+            .then(blob => {
+                if (blob) {
+                    const link = document.createElement('a');
+                    link.href = URL.createObjectURL(blob);
+                    link.download = filePath.split('/').pop();
+                    link.click();
+                }
+            });
+        });
+    });
+
+    function deleteFile(event, filepath) {
+        event.preventDefault();
+        fetch(`/delete/${filepath}`, {
+            method: 'POST',
+            headers: {
+                'Authorization': 'Bearer ' + localStorage.getItem('jwtToken')
+            }
+        })
+        .then(response => {
+            if (response.status === 401) {
+                window.location.href = '/';
+                return;
+            }
+            if (response.status === 200) {
+                window.location.reload();
+            }
+        });
+    }
+</script>
