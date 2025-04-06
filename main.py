@@ -448,6 +448,11 @@ def login():
         return jsonify(token=token)
     return jsonify(msg='Invalid credentials'), 401
 
+@app.route('/browse/', defaults={'subpath': ''})
+@app.route('/browse/<path:subpath>')
+def browse(subpath):
+    return redirect(url_for('file_manager', subpath=subpath))
+    
 if __name__ == '__main__':
     with app.app_context():
         initialize_servers()
