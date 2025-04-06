@@ -5,29 +5,21 @@ import os
 import subprocess
 import threading
 from werkzeug.security import generate_password_hash, check_password_hash
-from sqlalchemy import inspect
+import yaml
 from queue import Queue, Empty
 import time
 from collections import deque
+import uuid
+import json
 
 app = Flask(__name__)
-app.config['SECRET_KEY'] = 'super-secret-key' # Change this to something different
-app.config['JWT_SECRET_KEY'] = 'another-super-secret-key' # Also change this
-app.config['SQLALCHEMY_DATABASE_URI'] = 'sqlite:///accs.db'
+app.config['SECRET_KEY'] = 'super-secret-key'
+app.config['JWT_SECRET_KEY'] = 'another-super-secret-key'
+app.config['SQLALCHEMY_DATABASE_URI'] = 'sqlite:///panel.db'
 app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
+
 db = SQLAlchemy(app)
 jwt = JWTManager(app)
-last_lines = deque(maxlen=100)
-
-BASE_DIR = 'your_server_directory' # IMPORTANT -  Change this to your directory where server.jar and the panel files are located
-MC_SERVER_DIR = os.path.join(BASE_DIR) # optional: make the panel and sevrer files different
-MC_SERVER_JAR = 'server.jar' # change this to your JAR
-
-mc_process = None
-mc_thread = None
-mc_output_queue = Queue()
-mc_command_queue = Queue()
-mc_server_running = False
 
 class User(db.Model):
     id = db.Column(db.Integer, primary_key=True)
@@ -35,112 +27,320 @@ class User(db.Model):
     password = db.Column(db.String(150), nullable=False)
     is_admin = db.Column(db.Boolean, default=False)
 
+class Server(db.Model):
+    id = db.Column(db.Integer, primary_key=True)
+    uuid = db.Column(db.String(36), unique=True, nullable=False)
+    name = db.Column(db.String(150), nullable=False)
+    config = db.Column(db.Text, nullable=False)
+    created_by = db.Column(db.Integer, db.ForeignKey('user.id'))
+    is_default = db.Column(db.Boolean, default=False)
+
+class ServerUser(db.Model):
+    id = db.Column(db.Integer, primary_key=True)
+    server_id = db.Column(db.Integer, db.ForeignKey('server.id'), nullable=False)
+    user_id = db.Column(db.Integer, db.ForeignKey('user.id'), nullable=False)
+    can_manage = db.Column(db.Boolean, default=False)
+
 with app.app_context():
     db.create_all()
-    if not User.query.filter_by(username='root').first():
-        root = User(
-            username='root',
-            password=generate_password_hash('25565'), # Change the Password to something secret
+    if not User.query.filter_by(username='admin').first():
+        admin = User(
+            username='admin',
+            password=generate_password_hash('admin'),
             is_admin=True
         )
-        db.session.add(root)
+        db.session.add(admin)
         db.session.commit()
 
-def mc_server_runner():
-    global mc_process, mc_server_running, last_lines
-    try:
-        os.chdir(MC_SERVER_DIR)
-        mc_process = subprocess.Popen(
-            ['java', '-Xmx1024M', '-Xms1024M', '-jar', MC_SERVER_JAR, 'nogui'], # Change this to your RAM
-            stdin=subprocess.PIPE,
-            stdout=subprocess.PIPE,
-            stderr=subprocess.STDOUT,
-            text=True,
-            bufsize=1,
-            universal_newlines=True
-        )
-        mc_server_running = True
+class MinecraftServer:
+    def __init__(self, server_id):
+        self.server_id = server_id
+        self.process = None
+        self.thread = None
+        self.output_queue = Queue()
+        self.command_queue = Queue()
+        self.running = False
+        self.last_lines = deque(maxlen=100)
+        self.server_data = Server.query.get(server_id)
+        self.config = json.loads(self.server_data.config)
         
-        def command_sender():
-            while mc_server_running:
+    def start(self):
+        if self.thread is None or not self.thread.is_alive():
+            self.thread = threading.Thread(target=self._runner)
+            self.thread.daemon = True
+            self.thread.start()
+            return True
+        return False
+    
+    def stop(self):
+        if self.process and self.process.poll() is None:
+            self.command_queue.put("stop")
+            time.sleep(1)
+            if self.thread and self.thread.is_alive():
+                self.thread.join(timeout=5)
+            return True
+        return False
+    
+    def send_command(self, command):
+        if self.process and self.process.poll() is None:
+            self.command_queue.put(command)
+            return True
+        return False
+    
+    def _runner(self):
+        try:
+            os.chdir(self.config['directory'])
+            java_args = self.config['java_args'].split()
+            self.process = subprocess.Popen(
+                ['java'] + java_args + ['-jar', self.config['jar_file'], 'nogui'],
+                stdin=subprocess.PIPE,
+                stdout=subprocess.PIPE,
+                stderr=subprocess.STDOUT,
+                text=True,
+                bufsize=1,
+                universal_newlines=True
+            )
+            self.running = True
+            
+            def command_sender():
+                while self.running:
+                    try:
+                        command = self.command_queue.get(timeout=0.1)
+                        if self.process.poll() is None:
+                            self.process.stdin.write(command + "\n")
+                            self.process.stdin.flush()
+                    except (Empty, BrokenPipeError):
+                        continue
+            
+            threading.Thread(target=command_sender, daemon=True).start()
+            
+            while True:
+                output = self.process.stdout.readline()
+                if output == '' and self.process.poll() is not None:
+                    break
+                if output:
+                    stripped_output = output.strip()
+                    self.last_lines.append(stripped_output)
+                    self.output_queue.put(stripped_output)
+        except Exception as e:
+            error_msg = f"Server error: {str(e)}"
+            self.last_lines.append(error_msg)
+            self.output_queue.put(error_msg)
+        finally:
+            self.running = False
+            if self.process:
                 try:
-                    command = mc_command_queue.get(timeout=0.1)
-                    if mc_process.poll() is None:
-                        mc_process.stdin.write(command + "\n")
-                        mc_process.stdin.flush()
-                except (Empty, BrokenPipeError):
-                    continue
+                    self.process.stdin.close()
+                    self.process.terminate()
+                    try:
+                        self.process.wait(timeout=5)
+                    except subprocess.TimeoutExpired:
+                        self.process.kill()
+                except:
+                    pass
+
+servers = {}
+active_server_id = None
+
+def get_active_server():
+    global active_server_id
+    current_user = get_jwt_identity()
+    if not current_user:
+        return None
         
-        threading.Thread(target=command_sender, daemon=True).start()
+    if active_server_id is None:
+        server_user = ServerUser.query.filter_by(user_id=current_user['id']).first()
+        if server_user:
+            active_server_id = server_user.server_id
+        else:
+            if current_user.get('is_admin'):
+                first_server = Server.query.first()
+                if first_server:
+                    active_server_id = first_server.id
+    return servers.get(active_server_id)
+
+def user_has_access(user_id, server_id):
+    if User.query.get(user_id).is_admin:
+        return True
+    return ServerUser.query.filter_by(user_id=user_id, server_id=server_id).first() is not None
+
+def initialize_servers():
+    global servers
+    for server in Server.query.all():
+        if server.id not in servers:
+            servers[server.id] = MinecraftServer(server.id)
+
+initialize_servers()
+
+@app.route('/')
+def index():
+    return redirect(url_for('dashboard'))
+
+@app.route('/dashboard')
+@jwt_required()
+def dashboard():
+    current_user = get_jwt_identity()
+    user_servers = []
+    
+    if current_user.get('is_admin'):
+        user_servers = Server.query.all()
+    else:
+        server_users = ServerUser.query.filter_by(user_id=current_user['id']).all()
+        user_servers = [su.server for su in server_users]
+    
+    active_server = get_active_server()
+    return render_template('dashboard.html', 
+                         servers=user_servers,
+                         active_server_id=active_server.server_id if active_server else None,
+                         is_admin=current_user.get('is_admin', False))
+
+@app.route('/server/select/<int:server_id>', methods=['POST'])
+@jwt_required()
+def select_server(server_id):
+    global active_server_id
+    current_user = get_jwt_identity()
+    
+    if not user_has_access(current_user['id'], server_id):
+        return jsonify(success=False, error="Unauthorized"), 403
         
-        while True:
-            output = mc_process.stdout.readline()
-            if output == '' and mc_process.poll() is not None:
-                break
-            if output:
-                stripped_output = output.strip()
-                last_lines.append(stripped_output)
-                mc_output_queue.put(stripped_output)
-    except Exception as e:
-        error_msg = f"Server error: {str(e)}"
-        last_lines.append(error_msg)
-        mc_output_queue.put(error_msg)
-    finally:
-        mc_server_running = False
-        if mc_process:
-            try:
-                mc_process.stdin.close()
-                mc_process.terminate()
-                try:
-                    mc_process.wait(timeout=5)
-                except subprocess.TimeoutExpired:
-                    mc_process.kill()
-            except:
-                pass
+    active_server_id = server_id
+    return jsonify(success=True)
 
-def start_mc_server():
-    global mc_thread
-    if mc_thread is None or not mc_thread.is_alive():
-        mc_thread = threading.Thread(target=mc_server_runner)
-        mc_thread.daemon = True
-        mc_thread.start()
-        return True
-    return False
+@app.route('/server/create', methods=['POST'])
+@jwt_required()
+def create_server():
+    current_user = get_jwt_identity()
+    if not current_user.get('is_admin'):
+        return jsonify(success=False, error="Unauthorized"), 403
+    
+    data = request.get_json()
+    if not data or 'name' not in data or 'directory' not in data or 'jar_file' not in data:
+        return jsonify(success=False, error="Missing required fields"), 400
+    
+    if Server.query.filter_by(name=data['name']).first():
+        return jsonify(success=False, error="Server with this name already exists"), 400
+    
+    config = {
+        'directory': data['directory'],
+        'jar_file': data['jar_file'],
+        'java_args': data.get('java_args', '-Xmx1024M -Xms1024M'),
+        'auto_start': data.get('auto_start', False)
+    }
+    
+    server = Server(
+        uuid=str(uuid.uuid4()),
+        name=data['name'],
+        config=json.dumps(config),
+        created_by=current_user['id']
+    )
+    
+    db.session.add(server)
+    db.session.commit()
+    
+    servers[server.id] = MinecraftServer(server.id)
+    if config['auto_start']:
+        servers[server.id].start()
+    
+    return jsonify(success=True, server_id=server.id)
 
-def stop_mc_server():
-    global mc_process, mc_thread
-    if mc_process and mc_process.poll() is None:
-        mc_command_queue.put("stop")
-        time.sleep(1)
-        if mc_thread and mc_thread.is_alive():
-            mc_thread.join(timeout=5)
-        return True
-    return False
+@app.route('/admin/users', methods=['GET'])
+@jwt_required()
+def admin_users():
+    current_user = get_jwt_identity()
+    if not current_user.get('is_admin'):
+        return jsonify(success=False, error="Unauthorized"), 403
+    
+    users = User.query.all()
+    return jsonify(users=[{'id': u.id, 'username': u.username, 'is_admin': u.is_admin} for u in users])
 
-def send_mc_command(command):
-    if mc_process and mc_process.poll() is None:
-        mc_command_queue.put(command)
-        return True
-    return False
+@app.route('/admin/users/add', methods=['POST'])
+@jwt_required()
+def admin_add_user():
+    current_user = get_jwt_identity()
+    if not current_user.get('is_admin'):
+        return jsonify(success=False, error="Unauthorized"), 403
+    
+    data = request.get_json()
+    if not data or 'username' not in data or 'password' not in data:
+        return jsonify(success=False, error="Missing required fields"), 400
+    
+    if User.query.filter_by(username=data['username']).first():
+        return jsonify(success=False, error="User already exists"), 400
+    
+    user = User(
+        username=data['username'],
+        password=generate_password_hash(data['password']),
+        is_admin=data.get('is_admin', False)
+    )
+    
+    db.session.add(user)
+    db.session.commit()
+    return jsonify(success=True)
+
+@app.route('/admin/server/<int:server_id>/users', methods=['GET'])
+@jwt_required()
+def server_users(server_id):
+    current_user = get_jwt_identity()
+    if not current_user.get('is_admin'):
+        return jsonify(success=False, error="Unauthorized"), 403
+    
+    server_users = ServerUser.query.filter_by(server_id=server_id).all()
+    users = []
+    for su in server_users:
+        user = User.query.get(su.user_id)
+        users.append({
+            'id': user.id,
+            'username': user.username,
+            'can_manage': su.can_manage
+        })
+    
+    return jsonify(users=users)
+
+@app.route('/admin/server/<int:server_id>/users/add', methods=['POST'])
+@jwt_required()
+def server_add_user(server_id):
+    current_user = get_jwt_identity()
+    if not current_user.get('is_admin'):
+        return jsonify(success=False, error="Unauthorized"), 403
+    
+    data = request.get_json()
+    if not data or 'user_id' not in data:
+        return jsonify(success=False, error="Missing user_id"), 400
+    
+    if ServerUser.query.filter_by(server_id=server_id, user_id=data['user_id']).first():
+        return jsonify(success=False, error="User already has access to this server"), 400
+    
+    server_user = ServerUser(
+        server_id=server_id,
+        user_id=data['user_id'],
+        can_manage=data.get('can_manage', False)
+    )
+    
+    db.session.add(server_user)
+    db.session.commit()
+    return jsonify(success=True)
 
 @app.route('/mc_console/last_lines')
 @jwt_required()
 def get_last_lines():
-    return jsonify(lines=list(last_lines))
-
-@app.route('/favicon.ico')
-def get_favicon():
-    return send_from_directory('.', 'favicon.ico', mimetype='image/vnd.microsoft.icon')
-    
+    server = get_active_server()
+    if server:
+        return jsonify(lines=list(server.last_lines))
+    return jsonify(lines=[])
 
 @app.route('/mc_console/stream')
 def mc_console_stream():
+    server = get_active_server()
+    
     def generate():
         try:
             while True:
                 try:
-                    output = mc_output_queue.get(timeout=1)
-                    yield f"data: {output}\n\n"
+                    if server:
+                        output = server.output_queue.get(timeout=1)
+                        yield f"data: {output}\n\n"
+                    else:
+                        yield ":keepalive\n\n"
                 except Empty:
                     yield ":keepalive\n\n"
         except GeneratorExit:
@@ -151,78 +351,59 @@ def mc_console_stream():
 @app.route('/mc_console/command', methods=['POST'])
 @jwt_required()
 def mc_console_command():
+    server = get_active_server()
+    if not server:
+        return jsonify(success=False, error="No active server"), 400
+    
     command = request.json.get('command')
     if command:
-        if send_mc_command(command):
+        if server.send_command(command):
             return jsonify(success=True)
     return jsonify(success=False)
 
 @app.route('/mc_server/start', methods=['POST'])
 @jwt_required()
 def mc_server_start():
-    if start_mc_server():
+    server = get_active_server()
+    if not server:
+        return jsonify(success=False, error="No active server"), 400
+    
+    if server.start():
         return jsonify(success=True, message="Server started")
     return jsonify(success=False, message="Server is already running or an error occurred")
 
 @app.route('/mc_server/stop', methods=['POST'])
 @jwt_required()
 def mc_server_stop():
-    if stop_mc_server():
+    server = get_active_server()
+    if not server:
+        return jsonify(success=False, error="No active server"), 400
+    
+    if server.stop():
         return jsonify(success=True, message="Stopping server")
     return jsonify(success=False, message="Server is not running or an error occurred")
 
 @app.route('/mc_server/status')
 @jwt_required()
 def mc_server_status():
-    return jsonify(running=mc_server_running)
+    server = get_active_server()
+    if server:
+        return jsonify(running=server.running)
+    return jsonify(running=False)
 
-@app.route('/login', methods=['POST'])
-def login():
-    data = request.get_json()
-    if not data or 'username' not in data or 'password' not in data:
-        return jsonify(msg='Ungültige Anfrage'), 400
-        
-    user = User.query.filter_by(username=data.get('username')).first()
-    if user and check_password_hash(user.password, data.get('password')):
-        token = create_access_token(identity={'username': user.username, 'is_admin': user.is_admin})
-        return jsonify(token=token)
-    return jsonify(msg='Invalid Credentials'), 401
-
-@app.route('/create_user', methods=['POST'])
+@app.route('/files')
 @jwt_required()
-def create_user():
-    current_user = get_jwt_identity()
-    if not current_user.get('is_admin'):
-        return jsonify(msg='No Permissions'), 403
-        
-    data = request.get_json()
-    if not data or 'username' not in data or 'password' not in data:
-        return jsonify(msg='Invalid Request'), 400
-        
-    if User.query.filter_by(username=data.get('username')).first():
-        return jsonify(msg='User already exists'), 400
-        
-    user = User(
-        username=data.get('username'),
-        password=generate_password_hash(data.get('password')),
-        is_admin=data.get('is_admin', False)
-    )
-    db.session.add(user)
-    db.session.commit()
-    return jsonify(msg='Benutzer erstellt')
-
-
-def get_safe_path(subpath=""):
-    full_path = os.path.abspath(os.path.join(BASE_DIR, subpath))
-    if not full_path.startswith(BASE_DIR):
-        return BASE_DIR
-    return full_path
-
-@app.route('/', defaults={'subpath': ''})
-@app.route('/browse/', defaults={'subpath': ''})
-@app.route('/browse/<path:subpath>')
-def index(subpath):
-    current_path = get_safe_path(subpath)
+def file_manager():
+    server = get_active_server()
+    if not server:
+        return "No active server selected", 400
+    
+    base_dir = server.config['directory']
+    subpath = request.args.get('path', '')
+    current_path = os.path.abspath(os.path.join(base_dir, subpath))
+    
+    if not current_path.startswith(base_dir):
+        return "Access denied", 403
     
     if not os.path.exists(current_path):
         return "Path does not exist", 404
@@ -241,73 +422,30 @@ def index(subpath):
         entries.append({
             'name': item,
             'is_file': os.path.isfile(item_path),
-            'rel_path': os.path.relpath(item_path, BASE_DIR).replace('\\', '/')
+            'rel_path': os.path.relpath(item_path, base_dir).replace('\\', '/')
         })
     
-    parent_path = os.path.relpath(os.path.join(current_path, '..'), BASE_DIR).replace('\\', '/')
+    parent_path = os.path.relpath(os.path.join(current_path, '..'), base_dir).replace('\\', '/')
     if parent_path == '.':
         parent_path = ''
         
-    return render_template('index.html', entries=entries, current=subpath, parent_path=parent_path)
+    return render_template('file_manager.html', 
+                         entries=entries, 
+                         current=subpath, 
+                         parent_path=parent_path,
+                         server_name=server.server_data.name)
 
-@app.route('/download/<path:filepath>')
-@jwt_required()
-def download_file(filepath):
-    safe_path = get_safe_path(filepath)
-    if not os.path.exists(safe_path):
-        return "File not found", 404
-    return send_from_directory(
-        os.path.dirname(safe_path), 
-        os.path.basename(safe_path), 
-        as_attachment=True
-    )
-
-@app.route('/delete/<path:filepath>', methods=['POST'])
-@jwt_required()
-def delete_file(filepath):
-    safe_path = get_safe_path(filepath)
-    if not os.path.exists(safe_path):
-        return "File not found", 404
+@app.route('/login', methods=['POST'])
+def login():
+    data = request.get_json()
+    if not data or 'username' not in data or 'password' not in data:
+        return jsonify(msg='Invalid request'), 400
         
-    try:
-        if os.path.isfile(safe_path):
-            os.remove(safe_path)
-        else:
-            os.rmdir(safe_path)
-        return redirect(url_for('index', subpath=os.path.dirname(filepath)))
-    except Exception as e:
-        return str(e), 500
-
-@app.route('/upload/<path:subpath>', methods=['POST'])
-@jwt_required()
-def upload_file(subpath):
-    if 'file' not in request.files:
-        return "No File selected", 400
-        
-    file = request.files['file']
-    if file.filename == '':
-        return "No File selected", 400
-        
-    upload_path = get_safe_path(subpath)
-    try:
-        file.save(os.path.join(upload_path, file.filename))
-        return redirect(url_for('index', subpath=subpath))
-    except Exception as e:
-        return str(e), 500
-
-@app.route('/create_folder/<path:subpath>', methods=['POST'])
-@jwt_required()
-def create_folder(subpath):
-    folder_name = request.form.get('folder_name')
-    if not folder_name:
-        return "Folder name missing", 400
-        
-    full_path = get_safe_path(os.path.join(subpath, folder_name))
-    try:
-        os.makedirs(full_path, exist_ok=True)
-        return redirect(url_for('index', subpath=subpath))
-    except Exception as e:
-        return str(e), 500
+    user = User.query.filter_by(username=data.get('username')).first()
+    if user and check_password_hash(user.password, data.get('password')):
+        token = create_access_token(identity={'id': user.id, 'username': user.username, 'is_admin': user.is_admin})
+        return jsonify(token=token)
+    return jsonify(msg='Invalid credentials'), 401
 
 if __name__ == '__main__':
     app.run(host='0.0.0.0', port=5656, debug=True)
