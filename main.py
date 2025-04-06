@@ -166,9 +166,10 @@ def user_has_access(user_id, server_id):
 
 def initialize_servers():
     global servers
-    for server in Server.query.all():
-        if server.id not in servers:
-            servers[server.id] = MinecraftServer(server.id)
+    with app.app_context():
+        for server in Server.query.all():
+            if server.id not in servers:
+                servers[server.id] = MinecraftServer(server.id)
 
 initialize_servers()
 
@@ -448,4 +449,6 @@ def login():
     return jsonify(msg='Invalid credentials'), 401
 
 if __name__ == '__main__':
+    with app.app_context():
+        initialize_servers()
     app.run(host='0.0.0.0', port=5656, debug=True)
